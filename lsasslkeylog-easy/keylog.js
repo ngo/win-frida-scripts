@@ -47,7 +47,17 @@ var parse_ph_master_key = function(phMasterKey){
 	return buf2hex(master_key);
 }
 
+
+var get_secret_from_BDDD = function(struct_BDDD){
+	var struct_3lss = struct_BDDD.add(0x10).readPointer();
+	var struct_RUUU = struct_3lss.add(0x20).readPointer();
+	var struct_YKSM = struct_RUUU.add(0x10).readPointer();
+	var secret_ptr = struct_YKSM.add(0x18).readPointer();
+	return secret_ptr.readByteArray(48);
+}
+
 var client_randoms = {};
+var stages = {};
 
 Interceptor.attach(Module.getExportByName('ncrypt.dll', 'SslGenerateMasterKey'), {
     onEnter: function (args) {
@@ -96,3 +106,36 @@ Interceptor.attach(Module.getExportByName('ncrypt.dll', 'SslHashHandshake'), {
 	onLeave: function (retval) {
     }
 });
+
+Interceptor.attach(Module.getExportByName('ncrypt.dll', 'SslExpandTrafficKeys'), {
+    onEnter: function (args) {
+		this.retkey1 = ptr(args[3]);
+		this.retkey2 = ptr(args[4]);
+		this.client_random = client_randoms[this.threadId] || "???";
+		if(stages[this.threadId]){ // We are at the second call
+			stages[this.threadId] = null;			
+			this.suffix = "TRAFFIC_SECRET_0";
+		}else{ // We are at the first call
+			stages[this.threadId] = "handshake";
+			this.suffix = "HANDSHAKE_TRAFFIC_SECRET";
+		}
+	},
+	onLeave: function (retval) {
+		var key1 = get_secret_from_BDDD(this.retkey1.readPointer());
+		var key2 = get_secret_from_BDDD(this.retkey2.readPointer());
+		keylog("CLIENT_" + this.suffix + " " + this.client_random + " " + buf2hex(key1));
+		keylog("SERVER_" + this.suffix + " " + this.client_random + " " + buf2hex(key2));
+    }
+});
+
+Interceptor.attach(Module.getExportByName('ncrypt.dll', 'SslExpandExporterMasterKey'), {
+    onEnter: function (args) {
+		this.retkey = ptr(args[3]);
+		this.client_random = client_randoms[this.threadId] || "???";
+	},
+	onLeave: function (retval) {
+		var key = this.retkey.readPointer().add(0x10).readPointer().add(0x20).readPointer().add(0x10).readPointer().add(0x18).readPointer().readByteArray(48);
+		keylog("EXPORTER_SECRET " + this.client_random + " " + buf2hex(key));
+    }
+});
+
