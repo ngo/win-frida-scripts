@@ -143,7 +143,8 @@ var get_secret_from_BDDD = function(struct_BDDD){
 	var struct_RUUU = struct_3lss.add(0x20).readPointer();
 	var struct_YKSM = struct_RUUU.add(0x10).readPointer();
 	var secret_ptr = struct_YKSM.add(0x18).readPointer();
-	return secret_ptr.readByteArray(48); // TODO: secret size?
+        var size = struct_YKSM.add(0x10).readU32();
+	return secret_ptr.readByteArray(size);
 }
 
 
