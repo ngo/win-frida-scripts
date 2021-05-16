@@ -16,7 +16,7 @@ var client_randoms = {};
  * Note that version is 0x0303 both for TLS1.2 and TLS1.3, 
  * which is a backward compatibility hack in TLS 1.3
  */
-var shh = Module.findExportByName('ncrypt.dll', 'SslHashHandshake')
+var shh = Module.findExportByName('ncrypt.dll', 'SslHashHandshake');
 if(shh != null){
 	Interceptor.attach(shh, {
 	    onEnter: function (args) {
