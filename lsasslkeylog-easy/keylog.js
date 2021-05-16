@@ -16,25 +16,29 @@ var client_randoms = {};
  * Note that version is 0x0303 both for TLS1.2 and TLS1.3, 
  * which is a backward compatibility hack in TLS 1.3
  */
-Interceptor.attach(Module.getExportByName('ncrypt.dll', 'SslHashHandshake'), {
-    onEnter: function (args) {
-		// https://docs.microsoft.com/en-us/windows/win32/seccng/sslhashhandshake
-		var buf = ptr(args[2]);
-		var len = args[3].toInt32();
-		var mem = buf.readByteArray(len);
-		var msg_type = buf.readU8();
-		var version = buf.add(4).readU16();
-		if (msg_type == 1 && version == 0x0303){
-			// If we have client random, save it tied to current thread
-			var crandom = buf2hex(buf.add(6).readByteArray(32));
-			console.log("Got client random from SslHashHandshake: " + crandom);
-			client_randoms[this.threadId] = crandom;
-		}		
-	},
-	onLeave: function (retval) {
-    }
-});
-
+var shh = Module.findExportByName('ncrypt.dll', 'SslHashHandshake')
+if(shh != null){
+	Interceptor.attach(shh, {
+	    onEnter: function (args) {
+			// https://docs.microsoft.com/en-us/windows/win32/seccng/sslhashhandshake
+			var buf = ptr(args[2]);
+			var len = args[3].toInt32();
+			var mem = buf.readByteArray(len);
+			var msg_type = buf.readU8();
+			var version = buf.add(4).readU16();
+			if (msg_type == 1 && version == 0x0303){
+				// If we have client random, save it tied to current thread
+				var crandom = buf2hex(buf.add(6).readByteArray(32));
+				console.log("Got client random from SslHashHandshake: " + crandom);
+				client_randoms[this.threadId] = crandom;
+			}		
+		},
+		onLeave: function (retval) {
+	    }
+	});
+}else{
+	console.log("SslHashHandshake export not found! Either using a very old windows machine or something is wrong with frida or ncrypt.dll.");
+}
 /* ----- TLS1.2-specific ----- */
 
 var parse_parameter_list = function(pParameterList, calling_func){
@@ -147,36 +151,43 @@ var get_secret_from_BDDD = function(struct_BDDD){
 	return secret_ptr.readByteArray(size);
 }
 
-
-
-Interceptor.attach(Module.getExportByName('ncrypt.dll', 'SslExpandTrafficKeys'), {
-    onEnter: function (args) {
-		this.retkey1 = ptr(args[3]);
-		this.retkey2 = ptr(args[4]);
-		this.client_random = client_randoms[this.threadId] || "???";
-		if(stages[this.threadId]){ // We are at the second call
-			stages[this.threadId] = null;			
-			this.suffix = "TRAFFIC_SECRET_0";
-		}else{ // We are at the first call
-			stages[this.threadId] = "handshake";
-			this.suffix = "HANDSHAKE_TRAFFIC_SECRET";
-		}
-	},
-	onLeave: function (retval) {
-		var key1 = get_secret_from_BDDD(this.retkey1.readPointer());
-		var key2 = get_secret_from_BDDD(this.retkey2.readPointer());
-		keylog("CLIENT_" + this.suffix + " " + this.client_random + " " + buf2hex(key1));
-		keylog("SERVER_" + this.suffix + " " + this.client_random + " " + buf2hex(key2));
-    }
-});
-
-Interceptor.attach(Module.getExportByName('ncrypt.dll', 'SslExpandExporterMasterKey'), {
-    onEnter: function (args) {
-		this.retkey = ptr(args[3]);
-		this.client_random = client_randoms[this.threadId] || "???";
-	},
-	onLeave: function (retval) {
-		var key = this.retkey.readPointer().add(0x10).readPointer().add(0x20).readPointer().add(0x10).readPointer().add(0x18).readPointer().readByteArray(48);
-		keylog("EXPORTER_SECRET " + this.client_random + " " + buf2hex(key));
-    }
-});
+var setk = Module.findExportByName('ncrypt.dll', 'SslExpandTrafficKeys');
+if (setk != null){
+	Interceptor.attach(setk, {
+	    onEnter: function (args) {
+			this.retkey1 = ptr(args[3]);
+			this.retkey2 = ptr(args[4]);
+			this.client_random = client_randoms[this.threadId] || "???";
+			if(stages[this.threadId]){ // We are at the second call
+				stages[this.threadId] = null;			
+				this.suffix = "TRAFFIC_SECRET_0";
+			}else{ // We are at the first call
+				stages[this.threadId] = "handshake";
+				this.suffix = "HANDSHAKE_TRAFFIC_SECRET";
+			}
+		},
+		onLeave: function (retval) {
+			var key1 = get_secret_from_BDDD(this.retkey1.readPointer());
+			var key2 = get_secret_from_BDDD(this.retkey2.readPointer());
+			keylog("CLIENT_" + this.suffix + " " + this.client_random + " " + buf2hex(key1));
+			keylog("SERVER_" + this.suffix + " " + this.client_random + " " + buf2hex(key2));
+	    }
+	});
+}else{
+	console.log("SslExpandTrafficKeys export not found! Probably using an old OS such as Win 7. Otherwise report an issue.");
+}
+var seemk = Module.findExportByName('ncrypt.dll', 'SslExpandExporterMasterKey');
+if(seemk != null){
+	Interceptor.attach(seemk, {
+	    onEnter: function (args) {
+			this.retkey = ptr(args[3]);
+			this.client_random = client_randoms[this.threadId] || "???";
+		},
+		onLeave: function (retval) {
+			var key = this.retkey.readPointer().add(0x10).readPointer().add(0x20).readPointer().add(0x10).readPointer().add(0x18).readPointer().readByteArray(48);
+			keylog("EXPORTER_SECRET " + this.client_random + " " + buf2hex(key));
+	    }
+	});
+}else{
+	console.log("SslExpandExporterMasterKey export not found! Probably using an old OS such as Win 7. Otherwise report an issue.");
+}
