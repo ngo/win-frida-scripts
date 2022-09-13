@@ -20,3 +20,15 @@ You'll also need to install [Wireshark](https://www.wireshark.org/).
 ## Feedback, contacts
 
 Feel free to open issues and/or send emails to ngo at solidlab.ru
+
+## Windows 11 note
+
+As pointed out by https://github.com/l-o-l, in windows 11 by default lsass.exe would crash when hooking with frida.
+To mitigate this, the following actions must be performed:
+
+1. Go to `settings->privacy & security->windows security->app&browser control->exploit protection settings`.
+2. Create a new entry under `program settings` for lsass.exe, override `hardware-enforced stack protection` (should be set to off).
+
+## AV/EDR products note
+
+As getting a handle of  lsass.exe and/or accessing its memory is a part of many post-exploitation techniques, many antivirus products may either flag this activity as malicious or employ various protections for lsass.exe. If frida cannot attach to lsass.exe even running as admin (you can get an Access Denied error, `WriteProcessMemory returned 0x00000005` or similar), please be sure to check and disable all LSA protections. This is known e.g. to cause problems with Avast, see https://github.com/ngo/win-frida-scripts/issues/4, and Kaspersky is also known to block access to lsass.exe. A basic check is to try creating a memory dump of lsass.exe using Task Manager (as admin). If this does not succeed, there is some sort of lsass protection in place that should be disabled in order to be able to use frida.
