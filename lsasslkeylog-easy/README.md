@@ -9,7 +9,7 @@ You'll also need to install [Wireshark](https://www.wireshark.org/).
 ## Usage
 
 1. Download keylog.js;
-2. Open an administrative console and run: `\path\to\frida.exe --no-pause lsass.exe -l \path\to\keylog.js`;
+2. Open an administrative console and run: `\path\to\frida.exe lsass.exe -l \path\to\keylog.js`;
 3. Run wireshark and start a traffic capture;
 4. Make some TLS traffic (e.g. connect to an RDP, use Invoke-WebRequest from powershell or open a web page in IE);
 5. Make sure that `C:\keylog.log` starts to fill up with some keys, the path can be changed in `keylog.js`
